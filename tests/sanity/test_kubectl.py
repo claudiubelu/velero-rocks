@@ -10,7 +10,7 @@ from k8s_test_harness.util import docker_util
 def test_kubectl_rock():
     """Test kubectl rock."""
 
-    image_variable = "ROCK_KUBECTL_1_30_2"
+    image_variable = "ROCK_KUBECTL"
     image = os.getenv(image_variable)
     assert image is not None, f"${image_variable} is not set"
 
