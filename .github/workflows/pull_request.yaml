@@ -18,6 +18,12 @@ jobs:
       rockcraft-revisions: '{"amd64": "1783", "arm64": "1784"}'
       arch-skipping-maximize-build-space: '["arm64"]'
       platform-labels: '{"arm64": ["self-hosted", "Linux", "ARM64", "jammy", "large"]}'
+  run-tests:
+    uses: canonical/k8s-workflows/.github/workflows/run_tests.yaml@feat/multi-version-tests
+    needs: [build-and-push-arch-specifics]
+    secrets: inherit
+    with:
+      rock-metas: ${{ needs.build-and-push-arch-specifics.outputs.rock-metas }}
   scan-images:
     uses: canonical/k8s-workflows/.github/workflows/scan_images.yaml@main
     needs: [build-and-push-arch-specifics]
