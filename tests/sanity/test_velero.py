@@ -15,15 +15,15 @@ def test_velero_rock():
     assert image is not None, f"${image_variable} is not set"
 
     # check binary name and version.
-    process = docker_util.run_in_docker(image, False, "/velero", "version")
+    process = docker_util.run_in_docker(image, ["/velero", "version"], False)
     expected_err = "error finding Kubernetes API server config in --kubeconfig"
     assert expected_err in process.stderr
 
     # check helper binary.
-    process = docker_util.run_in_docker(image, False, "/velero-helper")
+    process = docker_util.run_in_docker(image, ["/velero-helper"], False)
     expected_err = "at least one argument must be provided, the working mode"
     assert expected_err in process.stderr
 
     # check restic and its version.
-    process = docker_util.run_in_docker(image, True, "restic", "version")
+    process = docker_util.run_in_docker(image, ["restic", "version"])
     assert "restic" in process.stdout and "0.15.0" in process.stdout
