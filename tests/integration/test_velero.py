@@ -5,6 +5,7 @@ import logging
 import uuid
 from pathlib import Path
 
+import pytest
 from k8s_test_harness import harness
 from k8s_test_harness.util import env_util, k8s_util
 from packaging import version
@@ -13,6 +14,14 @@ LOG = logging.getLogger(__name__)
 
 DIR = Path(__file__).absolute().parent
 MANIFESTS_DIR = DIR / ".." / "templates"
+
+
+VELERO_CHART_VERSIONS = [
+    # (velero_version, chart_version)
+    ("1.13.2", "6.7.0"),
+    ("1.12.1", "5.2.2"),
+    ("1.9.5", "2.32.6"),
+]
 
 
 def _get_velero_helm_cmd(velero_version, chart_version):
@@ -84,34 +93,37 @@ def _exec_velero_cmd(instance, deployment_name, namespace, *cmd):
     )
 
 
-def _test_integration_velero(instance: harness.Instance, velero_version, chart_version):
+@pytest.mark.parametrize("velero_version,chart_version", VELERO_CHART_VERSIONS)
+def test_integration_velero(
+    function_instance: harness.Instance, velero_version, chart_version
+):
     # Setup Minio first, which is an S3-compatible storage service. We'll use
     # it to test out Velero's functionality with it.
     manifest = MANIFESTS_DIR / "minio-deployment.yaml"
-    instance.exec(
+    function_instance.exec(
         ["k8s", "kubectl", "apply", "-f", "-"],
         input=Path(manifest).read_bytes(),
     )
 
-    k8s_util.wait_for_deployment(instance, "minio", "velero")
+    k8s_util.wait_for_deployment(function_instance, "minio", "velero")
 
     # Deploy Velero rock.
-    instance.exec(_get_velero_helm_cmd(velero_version, chart_version))
-    k8s_util.wait_for_deployment(instance, "velero", "velero")
+    function_instance.exec(_get_velero_helm_cmd(velero_version, chart_version))
+    k8s_util.wait_for_deployment(function_instance, "velero", "velero")
 
     # Deploy an nginx app which we'll back up.
     manifest = MANIFESTS_DIR / "nginx-deployment.yaml"
-    instance.exec(
+    function_instance.exec(
         ["k8s", "kubectl", "apply", "-f", "-"],
         input=Path(manifest).read_bytes(),
     )
 
-    k8s_util.wait_for_deployment(instance, "nginx-deployment", "nginx-example")
+    k8s_util.wait_for_deployment(function_instance, "nginx-deployment", "nginx-example")
 
     # Back the nginx app.
     backup_name = f"nginx-backup-{uuid.uuid4()}"
     _exec_velero_cmd(
-        instance,
+        function_instance,
         "velero",
         "velero",
         "backup",
@@ -122,7 +134,7 @@ def _test_integration_velero(instance: harness.Instance, velero_version, chart_v
     )
 
     # Delete the nginx app, we should be able to restore it.
-    instance.exec(
+    function_instance.exec(
         [
             "k8s",
             "kubectl",
@@ -137,7 +149,7 @@ def _test_integration_velero(instance: harness.Instance, velero_version, chart_v
 
     # Restore it, and expect it to become available.
     _exec_velero_cmd(
-        instance,
+        function_instance,
         "velero",
         "velero",
         "restore",
@@ -146,16 +158,4 @@ def _test_integration_velero(instance: harness.Instance, velero_version, chart_v
         backup_name,
     )
 
-    k8s_util.wait_for_deployment(instance, "nginx-deployment", "nginx-example")
-
-
-def test_integration_velero_1_13_2(function_instance: harness.Instance):
-    _test_integration_velero(function_instance, "1.13.2", "6.7.0")
-
-
-def test_integration_velero_1_12_1(function_instance: harness.Instance):
-    _test_integration_velero(function_instance, "1.12.1", "5.2.2")
-
-
-def test_integration_velero_1_9_5(function_instance: harness.Instance):
-    _test_integration_velero(function_instance, "1.9.5", "2.32.6")
+    k8s_util.wait_for_deployment(function_instance, "nginx-deployment", "nginx-example")
