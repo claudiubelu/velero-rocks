@@ -1,0 +1,86 @@
+# Dockerfile: https://github.com/vmware-tanzu/velero-plugin-for-vsphere/blob/v1.5.2/Dockerfile-plugin
+name: velero-plugin-for-vsphere
+summary: Velero Plugin for vSphere rock
+description: |
+    A rock containing the Velero Plugin for vSphere.
+
+    Velero gives you tools to back up and restore your Kubernetes cluster
+    resources and persistent volumes.
+license: Apache-2.0
+version: 1.5.2
+
+base: ubuntu@22.04
+build-base: ubuntu@22.04
+run-user: _daemon_
+
+platforms:
+  amd64:
+
+environment:
+  APP_VERSION: 1.5.2
+  LD_LIBRARY_PATH: /plugins
+
+# Services to be loaded by the Pebble entrypoint
+services:
+  install-plugin:
+    override: replace
+    startup: enabled
+    # Added a sleep to the command to prevent it from immediately exiting.
+    # This way, Pebble respects the on-success / on-failure rules.
+    command: /bin/bash -c "/scripts/install.sh; sleep 5"
+    on-success: shutdown
+    on-failure: shutdown
+
+parts:
+  dependencies:
+    plugin: dump
+    # From: https://gvddk-libs.s3-us-west-1.amazonaws.com/VMware-vix-disklib-7.0.2-17696664.x86_64.tar.gz
+    # From: https://github.com/vmware-tanzu/velero-plugin-for-vsphere/blob/v1.5.2/.github/workflows/ci.yml#L19
+    source: ./VMware-vix-disklib-7.0.2-17696664.x86_64.tar.gz
+    source-type: tar
+    override-build: |
+      craftctl default
+      # We need these libs for building and running the plugin.
+      mkdir /usr/local/vmware-vix-disklib-distrib
+      cp -r ./* /usr/local/vmware-vix-disklib-distrib/
+    organize:
+      # The LD_LIBRARY_PATH is set to /plugins.
+      lib64: ./plugins
+    prime:
+      - ./plugins
+
+  build-plugin:
+    after: [dependencies]
+    plugin: go
+    source: https://github.com/vmware-tanzu/velero-plugin-for-vsphere.git
+    source-type: git
+    source-tag: v${CRAFT_PROJECT_VERSION}
+    source-depth: 1
+    build-snaps:
+      - go/1.18/stable
+    build-environment:
+      - CGO_ENABLED: 1
+      - GO111MODULE: "on"
+      - GOOS: linux
+      - GOARCH: $CRAFT_ARCH_BUILD_FOR
+      - VERSION: ${CRAFT_PROJECT_VERSION}
+      - PKG: github.com/vmware-tanzu/velero-plugin-for-vsphere
+      - REGISTRY: canonical
+      - LDFLAGS: >
+          -X ${PKG}/pkg/buildinfo.Version=${VERSION} -X ${PKG}/pkg/buildinfo.Registry=${REGISTRY}
+    go-buildtags:
+      - mod=readonly
+      - installsuffix=static
+    go-generate:
+      - ./cmd/datamgr
+      - ./cmd/backup-driver
+      - ./cmd/plugin
+    override-build: |
+      craftctl default
+      mkdir -p "${CRAFT_PART_INSTALL}/scripts/"
+      cp scripts/install.sh "${CRAFT_PART_INSTALL}/scripts/"
+      chmod +x "${CRAFT_PART_INSTALL}/scripts/install.sh"
+    organize:
+      bin/data-*: ./
+      bin/backup-driver*: ./
+      bin/velero-*: ./plugins/
