@@ -20,10 +20,6 @@ environment:
   RESTIC_VERSION: 0.15.0
 
 parts:
-  add-base-files:
-    plugin: nil
-    stage-packages:
-      - base-files
 
   build-velero-binary:
     plugin: go
